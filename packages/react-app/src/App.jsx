@@ -83,13 +83,9 @@ function App(props) {
   const yourLocalBalance = useBalance(userProvider, address);
   if(DEBUG) console.log("💵 yourLocalBalance",yourLocalBalance?formatEther(yourLocalBalance):"...")
 
-  // Load in your local 📝 contract and read a value from it:
-  const readContracts = useContractLoader(localProvider)
-  if(DEBUG) console.log("📝 readContracts",readContracts)
-
   // If you want to make 🔐 write transactions to your contracts, use the userProvider:
-  const writeContracts = useContractLoader(userProvider)
-  if(DEBUG) console.log("🔐 writeContracts",writeContracts)
+  const contracts = useContractLoader(userProvider)
+  if(DEBUG) console.log("🔐 contracts",contracts)
 
 
   //📟 Listen for broadcast events
@@ -221,15 +217,14 @@ function App(props) {
               localProvider={localProvider}
               yourLocalBalance={yourLocalBalance}
               tx={tx}
-              writeContracts={writeContracts}
-              readContracts={readContracts}
+              contracts={contracts}
             />
           </Route>
           <Route path="/subgraph">
             <Subgraph
             subgraphUri={props.subgraphUri}
             tx={tx}
-            writeContracts={writeContracts}
+            contracts={contracts}
             mainnetProvider={mainnetProvider}
             />
           </Route>

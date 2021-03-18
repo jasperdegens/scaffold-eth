@@ -21,7 +21,7 @@ const { isAddress, getAddress, formatUnits, parseUnits } = utils;
 //
 // Select the network you want to deploy to here:
 //
-const defaultNetwork = "localhost";
+const defaultNetwork = "hardhat";
 
 function mnemonic() {
   try {
@@ -43,8 +43,12 @@ module.exports = {
   // (you will need to restart the `yarn run start` dev server after editing the .env)
 
   networks: {
+    hardhat: {
+      chainId: 1337,
+    },
     localhost: {
       url: "http://localhost:8545",
+      chainId: 1337,
       /*
         notice no mnemonic here? it will just use account 0 of the hardhat node to deploy
         (you can put in a mnemonic here to set the deployer locally)
