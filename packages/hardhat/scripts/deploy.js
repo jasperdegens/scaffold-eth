@@ -4,12 +4,163 @@ const chalk = require("chalk");
 const { config, ethers, tenderly, run } = require("hardhat");
 const { utils } = require("ethers");
 const R = require("ramda");
+const hre = require("hardhat");
+const ipfsApi = require('../../react-app/src/helpers/ipfsGraph');
+const constants = require('../../react-app/src/constants');
+const generateTokens = require('./mintTestTokens');
+const { feedData, fundData } = require('./feedData');
+const erc20 = require('./erc20Helpers');
+const goodDataFeedAbi = require('../artifacts/contracts/GoodDataFeed.sol/GoodDataFeed.json').abi;
+const graphDir = "../subgraph";
+
+const theGraphNode = constants.THEGRAPH[hre.network.name === 'localhost' ? 'localhost' : 'hosted'].ipfsUri;
+const ipfs = ipfsApi(theGraphNode)
+
+function publishNetwork() {
+  const graphConfigPath = `${graphDir}/config/config.json`
+  let graphConfig
+  try {
+    if (fs.existsSync(graphConfigPath)) {
+      graphConfig = fs
+        .readFileSync(graphConfigPath)
+        .toString();
+    } else {
+      graphConfig = '{}'
+    }
+  } catch (e) {
+    console.log(e)
+  }
+  graphConfig = JSON.parse(graphConfig)
+  graphConfig.network = hre.network.name
+  const folderPath = graphConfigPath.replace("/config.json","")
+  if (!fs.existsSync(folderPath)){
+    fs.mkdirSync(folderPath);
+  }
+  fs.writeFileSync(
+    graphConfigPath,
+    JSON.stringify(graphConfig, null, 2)
+  ); 
+}
+
+async function verifyContract(addr, constructorArgs){
+  await run("verify:verify", {
+    address: addr,
+    constructorArguments: constructorArgs
+  });
+}
+
+
+async function deployGoodDataFeed() {
+  const goodDataFeed = await deploy("GoodDataFeed");
+  await goodDataFeed.deployed();
+  // Register apis
+  for(let i = 0; i < feedData.length; i++) {
+    const feed = feedData[i];
+    const exists = await goodDataFeed.feedExists(feed.symbol);
+    if(!exists) {
+      await goodDataFeed.registerApi(
+        feed.symbol,
+        feed.apiUrl,
+        feed.apiValueParseMap,
+        feed.name,
+        feed.description,
+        feed.yearOffset
+      ).then(tx => tx.wait);
+    }
+  }
+  const accounts = await ethers.getSigners();
+  // try and transfer link to contract and to update feeds if not localhost
+  if(hre.network.name !== 'localhost') {
+    const lnkAddress = constants.LINK_ADDRESS[hre.network.name];
+    try{  
+      const lnkContract = erc20(lnkAddress);
+      console.log('Funding dada feed with LINK');
+      const tx = await lnkContract.connect(accounts[0]).transfer(
+        goodDataFeed.address,
+        ethers.constants.WeiPerEther.mul(1)
+      );
+      await tx.wait();
+
+      console.log('requesting latest data');
+      // update feeds for each 
+      for(let i = 0; i < feedData.length; i++) {
+        await goodDataFeed.connect(accounts[0]).requestLatestFeedData(feedData[i].symbol);
+      }
+    }catch (e){
+      console.log(e);
+    }
+  }
+
+  return goodDataFeed;
+}
+
+async function deployGoodTokenFund(dataFeedContract) {
+  const goodTokenFund = await deploy("GoodTokenFund", [dataFeedContract.address]);
+  await goodTokenFund.deployed();
+
+  // for now set beneficiary as main account
+  const accounts = await ethers.getSigners();
+  const beneficiary = accounts[0].address;
+  // add in feeds
+  for(let i = 0; i < fundData.length; i++) {
+    const fund = fundData[i];
+
+    // push fund metadata to ipfs
+    const fundCid = await ipfs.addJson(fund);
+
+    await goodTokenFund.createNewToken(
+      beneficiary, // for now just account as beneficiary
+      fund.symbol,
+      fund.targetFeedId,
+      fundCid.path,
+      ethers.BigNumber.from(10).pow(18).mul(fund.rangeMin),
+      ethers.BigNumber.from(10).pow(18).mul(fund.rangeMax)
+    ).then(tx => tx.wait)
+  }
+
+  return goodTokenFund;
+}
+
 
 const main = async () => {
 
   console.log("\n\n 📡 Deploying...\n");
+  
+  // Deploy the GoodDataFeed contract
+  const goodDataFeed = await deployGoodDataFeed();
+  await goodDataFeed.deployed();
 
-  const yourContract = await deploy("YourContract") // <-- add in constructor args like line 19 vvvv
+  // // const yourContract = await deploy("YourContract") // <-- add in constructor args like line 19 vvvv
+  const goodToken = await deploy("GoodToken") // <-- add in constructor args like line 19 vvvv
+  await goodToken.deployed();
+  const gTx = goodToken.deployTransaction;
+  await gTx.wait();
+  // Deploy the GoodTokenFund contract
+  const goodTokenFund = await deployGoodTokenFund(goodDataFeed);
+
+  // console.log(hre.network);
+  publishNetwork();
+
+  // verify contracts
+
+
+  console.log('NETWORK NAME: ' + hre.network.name)
+
+  // create test tokens!
+  await generateTokens(goodToken.address, goodTokenFund.address);
+
+
+  if(hre.network.name === 'localhost') {
+    //await bootstrapLocalData(goodToken, goodTokenFund)
+  } else {
+    //await bootstrapLocalData(goodToken, goodTokenFund)
+    await verifyContract(goodToken.address);
+    await verifyContract(goodDataFeed.address);
+    await verifyContract(goodTokenFund.address, [goodDataFeed.address]);
+  }
+
+
+
 
   //const yourContract = await ethers.getContractAt('YourContract', "0xaAC799eC2d00C013f1F11c37E654e59B0429DF6A") //<-- if you want to instantiate a version of a contract at a specific address!
   //const secondContract = await deploy("SecondContract")

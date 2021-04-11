@@ -1,25 +1,89 @@
-specVersion: 0.0.2
+specVersion: 0.0.1
+description: Good Tokens
+repository: https://github.com/jasperdegens/scaffold-eth/tree/good-tokens
 schema:
   file: ./src/schema.graphql
 dataSources:
+
   - kind: ethereum/contract
-    name: YourContract
-    network: localhost
+    name: GoodToken
+    network: '{{network}}'
     source:
-      address: '{{YourContractAddress}}'
-      abi: YourContract
-      startBlock: 1
+      address: '{{GoodTokenAddress}}'
+      abi: GoodToken
+      startBlock: 8376794
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.4
       language: wasm/assemblyscript
       entities:
-        - Purpose
-        - Sender
+        - Artwork
+        - Artist
+        - Transfer
+        - Fund
+        - Feed
       abis:
-        - name: YourContract
-          file: ./abis/YourContract.json
+        - name: GoodToken
+          file: ./abis/GoodToken.json
       eventHandlers:
-        - event: SetPurpose(address,string)
-          handler: handleSetPurpose
+        - event: ArtworkMinted(uint256,address,uint256,uint8,uint256,uint64,string,string,address,uint256)
+          handler: handleArtworkMinted
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleTransfer
+      blockHandlers:
+        - handler: handleBlock
+      file: ./src/mapping.ts
+
+
+  - kind: ethereum/contract
+    name: GoodTokenFund
+    network: '{{network}}'
+    source:
+      address: '{{GoodTokenFundAddress}}'
+      abi: GoodTokenFund
+      startBlock: 8376794
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.4
+      language: wasm/assemblyscript
+      entities:
+        - Artwork
+        - Artist
+        - Transfer
+        - Fund
+        - Feed
+      abis:
+        - name: GoodTokenFund
+          file: ./abis/GoodTokenFund.json
+      eventHandlers:
+        - event: FundCreated(address,string,uint256)
+          handler: handleFundCreated
+      file: ./src/mapping.ts
+
+
+  - kind: ethereum/contract
+    name: GoodDataFeed
+    network: '{{network}}'
+    source:
+      address: '{{GoodDataFeedAddress}}'
+      abi: GoodDataFeed
+      startBlock: 8376794
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.4
+      language: wasm/assemblyscript
+      entities:
+        - Artwork
+        - Artist
+        - Transfer
+        - Fund
+        - Feed
+      abis:
+        - name: GoodDataFeed
+          file: ./abis/GoodDataFeed.json
+      eventHandlers:
+        - event: FeedRegistered(string,string,string,string,uint256)
+          handler: handleFeedRegistered
+        - event: FeedDataUpdated(string,uint256)
+          handler: handleFeedDataUpdated
       file: ./src/mapping.ts
